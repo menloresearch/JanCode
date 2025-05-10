@@ -1268,6 +1268,7 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 			maxReadFileLine,
 			terminalCompressProgressBar,
 			historyPreviewCollapsed,
+			maxConcurrentFileReads,
 		} = await this.getState()
 
 		const telemetryKey = process.env.POSTHOG_API_KEY
@@ -1352,6 +1353,7 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 			language: language ?? formatLanguage(vscode.env.language),
 			renderContext: this.renderContext,
 			maxReadFileLine: maxReadFileLine ?? 500,
+			maxConcurrentFileReads: maxConcurrentFileReads ?? 15,
 			settingsImportedAt: this.settingsImportedAt,
 			terminalCompressProgressBar: terminalCompressProgressBar ?? true,
 			hasSystemPromptOverride,
@@ -1445,6 +1447,7 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 			telemetrySetting: stateValues.telemetrySetting || "unset",
 			showRooIgnoredFiles: stateValues.showRooIgnoredFiles ?? true,
 			maxReadFileLine: stateValues.maxReadFileLine ?? 500,
+			maxConcurrentFileReads: stateValues.maxConcurrentFileReads ?? 15,
 			historyPreviewCollapsed: stateValues.historyPreviewCollapsed ?? false,
 		}
 	}
