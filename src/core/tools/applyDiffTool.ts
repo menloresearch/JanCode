@@ -29,7 +29,12 @@ export async function applyDiffTool(
 	removeClosingTag: RemoveClosingTag,
 ) {
 	const argsXmlTag: string | undefined = block.params.args
+	const legacyPath: string | undefined = block.params.path
+	const legacyDiffContent: string | undefined = block.params.diff
+	const legacyStartLineStr: string | undefined = block.params.start_line
+
 	let operationsMap: Record<string, DiffOperation> = {}
+	let usingLegacyParams = false
 
 	// Handle partial message first
 	if (block.partial) {
@@ -39,6 +44,9 @@ export async function applyDiffTool(
 			if (match) {
 				filePath = match[1]
 			}
+		} else if (legacyPath) {
+			// Use legacy path if argsXmlTag is not present for partial messages
+			filePath = legacyPath
 		}
 
 		const sharedMessageProps: ClineSayTool = {
@@ -50,51 +58,67 @@ export async function applyDiffTool(
 		return
 	}
 
-	if (!argsXmlTag) {
-		cline.consecutiveMistakeCount++
-		cline.recordToolError("apply_diff")
-		const errorMsg = await cline.sayAndCreateMissingParamError("apply_diff", "args")
-		pushToolResult(errorMsg)
-		return
-	}
+	if (argsXmlTag) {
+		// Parse file entries from XML (new way)
+		try {
+			const parsed = parseXml(argsXmlTag, ["file.diff.content"]) as any
+			const files = Array.isArray(parsed.file) ? parsed.file : [parsed.file].filter(Boolean)
 
-	// Parse file entries from XML
-	try {
-		const parsed = parseXml(argsXmlTag, ["file.diff.content"]) as any
-		const files = Array.isArray(parsed.file) ? parsed.file : [parsed.file].filter(Boolean)
+			for (const file of files) {
+				if (!file.path || !file.diff) continue
 
-		for (const file of files) {
-			if (!file.path || !file.diff) continue
+				const filePath = file.path
 
-			const filePath = file.path
+				// Initialize the operation in the map if it doesn't exist
+				if (!operationsMap[filePath]) {
+					operationsMap[filePath] = {
+						path: filePath,
+						diff: [],
+					}
+				}
 
-			// Initialize the operation in the map if it doesn't exist
-			if (!operationsMap[filePath]) {
-				operationsMap[filePath] = {
-					path: filePath,
-					diff: [],
+				// Handle diff as either array or single element
+				const diffs = Array.isArray(file.diff) ? file.diff : [file.diff]
+
+				for (let i = 0; i < diffs.length; i++) {
+					const diff = diffs[i]
+					let diffContent: string
+					let startLine: number | undefined
+
+					diffContent = diff.content
+					startLine = diff.start_line ? parseInt(diff.start_line) : undefined
+
+					operationsMap[filePath].diff.push({
+						content: diffContent,
+						startLine,
+					})
 				}
 			}
-
-			// Handle diff as either array or single element
-			const diffs = Array.isArray(file.diff) ? file.diff : [file.diff]
-
-			for (let i = 0; i < diffs.length; i++) {
-				const diff = diffs[i]
-				let diffContent: string
-				let startLine: number | undefined
-
-				diffContent = diff.content
-				startLine = diff.start_line ? parseInt(diff.start_line) : undefined
-
-				operationsMap[filePath].diff.push({
-					content: diffContent,
-					startLine,
-				})
-			}
+		} catch (error) {
+			throw new Error(`Failed to parse apply_diff XML: ${error instanceof Error ? error.message : String(error)}`)
 		}
-	} catch (error) {
-		throw new Error(`Failed to parse apply_diff XML: ${error instanceof Error ? error.message : String(error)}`)
+	} else if (legacyPath && typeof legacyDiffContent === "string") {
+		// Handle legacy parameters (old way)
+		usingLegacyParams = true
+		operationsMap[legacyPath] = {
+			path: legacyPath,
+			diff: [
+				{
+					content: legacyDiffContent, // Unescaping will be handled later like new diffs
+					startLine: legacyStartLineStr ? parseInt(legacyStartLineStr) : undefined,
+				},
+			],
+		}
+	} else {
+		// Neither new XML args nor old path/diff params are sufficient
+		cline.consecutiveMistakeCount++
+		cline.recordToolError("apply_diff")
+		const errorMsg = await cline.sayAndCreateMissingParamError(
+			"apply_diff",
+			"args (or legacy 'path' and 'diff' parameters)",
+		)
+		pushToolResult(errorMsg)
+		return
 	}
 
 	// If no operations were extracted, bail out
@@ -104,7 +128,9 @@ export async function applyDiffTool(
 		pushToolResult(
 			await cline.sayAndCreateMissingParamError(
 				"apply_diff",
-				"args (must contain at least one valid file element)",
+				usingLegacyParams
+					? "legacy 'path' and 'diff' (must be valid and non-empty)"
+					: "args (must contain at least one valid file element)",
 			),
 		)
 		return
