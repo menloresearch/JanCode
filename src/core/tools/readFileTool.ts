@@ -48,15 +48,21 @@ export async function readFileTool(
 	_removeClosingTag: RemoveClosingTag,
 ) {
 	const argsXmlTag: string | undefined = block.params.args
+	const legacyPath: string | undefined = block.params.path
+	const legacyStartLineStr: string | undefined = block.params.start_line
+	const legacyEndLineStr: string | undefined = block.params.end_line
 
 	// Handle partial message first
 	if (block.partial) {
 		let filePath = ""
+		// Prioritize args for partial, then legacy path
 		if (argsXmlTag) {
 			const match = argsXmlTag.match(/<file>.*?<path>([^<]+)<\/path>/s)
-			if (match) {
-				filePath = match[1]
-			}
+			if (match) filePath = match[1]
+		}
+		if (!filePath && legacyPath) {
+			// If args didn't yield a path, try legacy
+			filePath = legacyPath
 		}
 
 		const fullPath = filePath ? path.resolve(cline.cwd, filePath) : ""
@@ -73,52 +79,70 @@ export async function readFileTool(
 		return
 	}
 
-	if (!argsXmlTag) {
-		cline.consecutiveMistakeCount++
-		cline.recordToolError("read_file")
-		const errorMsg = await cline.sayAndCreateMissingParamError("read_file", "args")
-		pushToolResult(`<files><error>${errorMsg}</error></files>`)
-		return
-	}
-
-	// Parse file entries from XML
 	const fileEntries: FileEntry[] = []
-	try {
-		const parsed = parseXml(argsXmlTag) as any
-		const files = Array.isArray(parsed.file) ? parsed.file : [parsed.file].filter(Boolean)
 
-		for (const file of files) {
-			if (!file.path) continue
+	if (argsXmlTag) {
+		// Parse file entries from XML (new multi-file format)
+		try {
+			const parsed = parseXml(argsXmlTag) as any
+			const files = Array.isArray(parsed.file) ? parsed.file : [parsed.file].filter(Boolean)
 
-			const fileEntry: FileEntry = {
-				path: file.path,
-				lineRanges: [],
-			}
+			for (const file of files) {
+				if (!file.path) continue // Skip if no path in a file entry
 
-			// Handle line ranges
-			if (file.line_range) {
-				const ranges = Array.isArray(file.line_range) ? file.line_range : [file.line_range]
-				for (const range of ranges) {
-					const match = range.match(/(\d+)-(\d+)/)
-					if (match) {
-						const [, start, end] = match.map(Number)
-						if (!isNaN(start) && !isNaN(end)) {
-							fileEntry.lineRanges?.push({ start, end })
+				const fileEntry: FileEntry = {
+					path: file.path,
+					lineRanges: [],
+				}
+
+				if (file.line_range) {
+					const ranges = Array.isArray(file.line_range) ? file.line_range : [file.line_range]
+					for (const range of ranges) {
+						const match = String(range).match(/(\d+)-(\d+)/) // Ensure range is treated as string
+						if (match) {
+							const [, start, end] = match.map(Number)
+							if (!isNaN(start) && !isNaN(end)) {
+								fileEntry.lineRanges?.push({ start, end })
+							}
 						}
 					}
 				}
+				fileEntries.push(fileEntry)
 			}
-
-			fileEntries.push(fileEntry)
+		} catch (error) {
+			const errorMessage = `Failed to parse read_file XML args: ${error instanceof Error ? error.message : String(error)}`
+			await handleError("parsing read_file args", new Error(errorMessage))
+			pushToolResult(`<files><error>${errorMessage}</error></files>`)
+			return
 		}
-	} catch (error) {
-		throw new Error(`Failed to parse read_file XML: ${error instanceof Error ? error.message : String(error)}`)
+	} else if (legacyPath) {
+		// Handle legacy single file path as a fallback
+		console.warn("[readFileTool] Received legacy 'path' parameter. Consider updating to use 'args' structure.")
+
+		const fileEntry: FileEntry = {
+			path: legacyPath,
+			lineRanges: [],
+		}
+
+		if (legacyStartLineStr && legacyEndLineStr) {
+			const start = parseInt(legacyStartLineStr, 10)
+			const end = parseInt(legacyEndLineStr, 10)
+			if (!isNaN(start) && !isNaN(end) && start > 0 && end > 0) {
+				fileEntry.lineRanges?.push({ start, end })
+			} else {
+				console.warn(
+					`[readFileTool] Invalid legacy line range for ${legacyPath}: start='${legacyStartLineStr}', end='${legacyEndLineStr}'`,
+				)
+			}
+		}
+		fileEntries.push(fileEntry)
 	}
 
+	// If, after trying both new and legacy, no valid file entries are found.
 	if (fileEntries.length === 0) {
 		cline.consecutiveMistakeCount++
 		cline.recordToolError("read_file")
-		const errorMsg = await cline.sayAndCreateMissingParamError("read_file", "args")
+		const errorMsg = await cline.sayAndCreateMissingParamError("read_file", "args (containing valid file paths)")
 		pushToolResult(`<files><error>${errorMsg}</error></files>`)
 		return
 	}

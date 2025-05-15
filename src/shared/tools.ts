@@ -45,8 +45,8 @@ export const toolParamNames = [
 	"question",
 	"result",
 	"diff",
-	"start_line",
-	"end_line",
+	// "start_line", // Removed duplicate, kept the ones at the end of the list from the original commit
+	// "end_line",   // Removed duplicate
 	"mode_slug",
 	"reason",
 	"line",
@@ -83,7 +83,7 @@ export interface ExecuteCommandToolUse extends ToolUse {
 
 export interface ReadFileToolUse extends ToolUse {
 	name: "read_file"
-	params: Partial<Pick<Record<ToolParamName, string>, "args">>
+	params: Partial<Pick<Record<ToolParamName, string>, "args" | "path" | "start_line" | "end_line">>
 }
 
 export interface FetchInstructionsToolUse extends ToolUse {
