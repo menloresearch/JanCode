@@ -11,7 +11,7 @@ import { telemetryService } from "../../services/telemetry/TelemetryService"
 
 import { fetchInstructionsTool } from "../tools/fetchInstructionsTool"
 import { listFilesTool } from "../tools/listFilesTool"
-import { readFileTool } from "../tools/readFileTool"
+import { getReadFileToolDescription, readFileTool } from "../tools/readFileTool"
 import { writeToFileTool } from "../tools/writeToFileTool"
 import { applyDiffTool } from "../tools/applyDiffTool"
 import { insertContentTool } from "../tools/insertContentTool"
@@ -32,7 +32,6 @@ import { checkpointSave } from "../checkpoints"
 import { formatResponse } from "../prompts/responses"
 import { validateToolUse } from "../tools/validateToolUse"
 import { Task } from "../task/Task"
-import { parseXml } from "../../utils/xml"
 
 /**
  * Processes and presents assistant message content to the user interface.
@@ -154,35 +153,8 @@ export async function presentAssistantMessage(cline: Task) {
 				switch (block.name) {
 					case "execute_command":
 						return `[${block.name} for '${block.params.command}']`
-					case "read_file": {
-						// Handle both single path and multiple files via args
-						if (block.params.args) {
-							try {
-								const parsed = parseXml(block.params.args) as any
-								const files = Array.isArray(parsed.file) ? parsed.file : [parsed.file].filter(Boolean)
-								const paths = files.map((f: any) => f?.path).filter(Boolean) as string[]
-
-								if (paths.length === 0) {
-									return `[${block.name} with no valid paths]`
-								} else if (paths.length === 1) {
-									return `[${block.name} for '${paths[0]}']`
-								} else if (paths.length <= 3) {
-									const pathList = paths.map((p) => `'${p}'`).join(", ")
-									return `[${block.name} for ${pathList}]`
-								} else {
-									return `[${block.name} for ${paths.length} files]`
-								}
-							} catch (error) {
-								console.error("Failed to parse read_file args XML for description:", error)
-								return `[${block.name} with unparseable args]`
-							}
-						} else if (block.params.path) {
-							// Fallback for legacy single-path usage
-							return `[${block.name} for '${block.params.path}']`
-						} else {
-							return `[${block.name} with missing path/args]`
-						}
-					}
+					case "read_file":
+						return getReadFileToolDescription(block.name, block.params)
 					case "fetch_instructions":
 						return `[${block.name} for '${block.params.task}']`
 					case "write_to_file":

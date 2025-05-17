@@ -15,6 +15,37 @@ import { extractTextFromFile, addLineNumbers } from "../../integrations/misc/ext
 import { parseSourceCodeDefinitionsForFile } from "../../services/tree-sitter"
 import { parseXml } from "../../utils/xml"
 
+export function getReadFileToolDescription(blockName: string, blockParams: any): string {
+	// Handle both single path and multiple files via args
+	if (blockParams.args) {
+		try {
+			const parsed = parseXml(blockParams.args) as any
+			const files = Array.isArray(parsed.file) ? parsed.file : [parsed.file].filter(Boolean)
+			const paths = files.map((f: any) => f?.path).filter(Boolean) as string[]
+
+			if (paths.length === 0) {
+				return `[${blockName} with no valid paths]`
+			} else if (paths.length === 1) {
+				// Modified part for single file
+				return `[${blockName} for '${paths[0]}'. Reading multiple files at once is more efficient for the LLM. If other files are relevant to your current task, please read them simultaneously.]`
+			} else if (paths.length <= 3) {
+				const pathList = paths.map((p) => `'${p}'`).join(", ")
+				return `[${blockName} for ${pathList}]`
+			} else {
+				return `[${blockName} for ${paths.length} files]`
+			}
+		} catch (error) {
+			console.error("Failed to parse read_file args XML for description:", error)
+			return `[${blockName} with unparseable args]`
+		}
+	} else if (blockParams.path) {
+		// Fallback for legacy single-path usage
+		// Modified part for single file (legacy)
+		return `[${blockName} for '${blockParams.path}'. Reading multiple files at once is more efficient for the LLM. If other files are relevant to your current task, please read them simultaneously.]`
+	} else {
+		return `[${blockName} with missing path/args]`
+	}
+}
 // Types
 interface LineRange {
 	start: number
@@ -164,7 +195,8 @@ export async function readFileTool(
 
 	try {
 		// First validate all files and get approvals
-		for (const fileResult of fileResults) {
+		for (let i = 0; i < fileResults.length; i++) {
+			const fileResult = fileResults[i]
 			const relPath = fileResult.path
 			const fullPath = path.resolve(cline.cwd, relPath)
 
@@ -216,6 +248,9 @@ export async function readFileTool(
 				const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
 				const { maxReadFileLine = 500 } = (await cline.providerRef.deref()?.getState()) ?? {}
 
+				const numOtherFiles = fileResults.length - 1 - i
+				const additionalFileCount = numOtherFiles > 0 ? numOtherFiles : undefined
+
 				// Create line snippet for approval message
 				let lineSnippet = ""
 				if (fileResult.lineRanges && fileResult.lineRanges.length > 0) {
@@ -235,6 +270,7 @@ export async function readFileTool(
 					isOutsideWorkspace,
 					content: fullPath,
 					reason: lineSnippet,
+					additionalFileCount,
 				} satisfies ClineSayTool)
 
 				const { response, text, images } = await cline.ask("tool", completeMessage, false)
