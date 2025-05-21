@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  GIT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'main' }}
+  GIT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'jancode-main' }}
   NODE_VERSION: 20.18.1
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
       contents: write # Required for pushing tags.
     if: >
         ( github.event_name == 'pull_request' &&
-        github.event.pull_request.base.ref == 'main' &&
+        github.event.pull_request.base.ref == 'jancode-main' &&
         contains(github.event.pull_request.title, 'Changeset version bump') ) ||
         github.event_name == 'workflow_dispatch'
     steps:

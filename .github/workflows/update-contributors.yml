@@ -3,7 +3,7 @@ name: Update Contributors
 on:
   push:
     branches:
-      - main
+      - jancode-main
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -53,4 +53,4 @@ jobs:
             Automated update of contributors list and related files
             
             This PR was created automatically by a GitHub Action workflow and includes all changed files.
-          base: main
+          base: jancode-main

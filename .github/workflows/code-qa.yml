@@ -3,10 +3,10 @@ name: Code QA Roo Code
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [jancode-main]
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
-    branches: [main]
+    branches: [jancode-main]
 
 env:
   NODE_VERSION: 20.18.1
