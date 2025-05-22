@@ -207,6 +207,7 @@ export type ExtensionState = Pick<
 	renderContext: "sidebar" | "editor"
 	settingsImportedAt?: number
 	historyPreviewCollapsed?: boolean
+	autoCondenseContextPercent: number
 }
 
 export type { ClineMessage, ClineAsk, ClineSay }
