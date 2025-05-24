@@ -97,7 +97,16 @@ export async function truncateConversationIfNeeded({
 	condensingApiHandler,
 }: TruncateOptions): Promise<TruncateResponse> {
 	// Calculate the maximum tokens reserved for response
-	const reservedTokens = maxTokens || contextWindow * 0.2
+	// When autoCondenseContext is enabled, use (100 - autoCondenseContextPercent) / 100 with minimum of 30%
+	let reservedTokensPercent = 0.2 // Default 20%
+	if (autoCondenseContext) {
+		reservedTokensPercent = (100 - autoCondenseContextPercent) / 100
+		// Ensure minimum of 30% if calculated value is less than 35%
+		if (reservedTokensPercent < 0.35) {
+			reservedTokensPercent = 0.35
+		}
+	}
+	const reservedTokens = maxTokens || contextWindow * reservedTokensPercent
 
 	// Estimate tokens for the last message (which is always a user message)
 	const lastMessage = messages[messages.length - 1]
